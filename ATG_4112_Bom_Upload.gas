@@ -1,0 +1,456 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.Global.Log.Declare(String)
+Variable.Global.completed.Declare(String)
+Variable.UDT.BOM.Define("Field",String)
+Variable.UDT.BOM.Define("Size",String)
+Variable.UDT.BOM.Define("Value",String)
+Variable.UDT.BOM.Define("Required",Boolean)
+Variable.UDT.BOM.Define("Format",String)
+Variable.UDT.BOM.Define("Numeric",Boolean)
+
+Variable.uGlobal.uBOM.Declare("BOM")
+Variable.Global.File.Declare(String)
+Variable.Global.Parents.Declare(String)
+Program.External.Include.Library("RouterUpload.lib")
+Variable.Global.sServer.Declare(String)
+Function.Intrinsic.Debug.SetScriptVersion("0.0.219","True")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+V.local.sfile.Declare(String)
+V.Local.bret.Declare(Boolean)
+
+V.Global.Parents.Redim(-1,-1)
+
+F.Intrinsic.Control.CallSub(Prepudt)
+
+'V.global.log.Set("X:\CUSTUP\log\log.txt")
+F.Intrinsic.Control.CallSub(Setserver)
+F.Intrinsic.String.Concat(V.Global.sServer,"\boms\",V.caller.companycode,"\logs\log.txt",V.Global.Log)
+F.Intrinsic.file.Exists(V.global.log,V.Local.bret)
+F.Intrinsic.Control.If(V.Local.bret,=,False)
+	F.Intrinsic.file.String2File(V.global.log,"")
+F.Intrinsic.Control.endif
+F.Intrinsic.Debug.Stop
+'V.Global.completed.Set("X:\custUP\completed")
+F.Intrinsic.String.Concat(V.Global.sServer,"boms",V.Caller.CompanyCode,"\completed",V.Global.completed)
+
+F.Intrinsic.File.DirExists(V.global.completed,V.Local.bRet)
+F.Intrinsic.Control.If(V.Local.bret,=,False)
+	F.Intrinsic.file.CreateDir(V.Global.completed)
+F.Intrinsic.Control.EndIf
+
+
+F.ODBC.Connection!conP.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+F.Intrinsic.Control.If(V.Ambient.isintaskscheduler,=,True)
+	F.Intrinsic.Control.CallSub(Processdir)
+F.Intrinsic.Control.Else
+	F.Intrinsic.ui.ShowOpenFileDialog("","","",V.Local.sFile)
+	F.Intrinsic.Control.CallSub(Processfile,"sFile",V.Local.sfile)
+F.Intrinsic.Control.EndIf
+
+
+F.Global.General.CallWrapperSync(1000,V.caller.CompanyCode)
+
+F.Intrinsic.Control.CallSub(Processrouters)
+
+
+F.ODBC.Connection!conP.Close
+
+Program.Sub.Main.End
+
+Program.Sub.ProcessDir.Start
+
+V.Local.sfiles.Declare(String)
+V.Local.iX.Declare(Long)
+V.Local.sDir.Declare(String)
+
+'V.Local.sDir.set("X:\BOMUP\")
+F.Intrinsic.String.Concat(V.Global.sServer,"\boms\",V.Caller.CompanyCode,"\",V.local.sDir)
+
+F.Intrinsic.Debug.stop
+F.Intrinsic.File.GetFileList(V.Local.sDir,2,V.Local.sfiles)
+
+F.Intrinsic.String.Split(V.Local.sfiles,":",V.Local.sfiles)
+
+F.Intrinsic.Control.For(V.Local.iX,V.Local.sfiles.LBound,V.Local.sfiles.UBound,1)
+	F.Intrinsic.String.Concat(V.Local.sDir,V.Local.sfiles(v.Local.iX),V.Local.sfiles(v.Local.iX))
+	F.Intrinsic.Control.CallSub(Processfile,"sfile",V.Local.sfiles(v.Local.iX))
+F.Intrinsic.Control.Next(V.Local.iX)
+
+
+Program.Sub.ProcessDir.End
+
+Program.Sub.ProcessFile.Start
+V.Local.iUB.Declare(Long)
+V.Local.slines.Declare(String)
+V.Local.sline.Declare(String)
+V.Local.iL.Declare(Long)
+V.Local.iC.Declare(Long)
+V.Local.sPart.Declare(String)
+V.local.squery.Declare(String)
+V.Local.stemp.Declare(String)
+V.Local.sdate.Declare(String)
+V.Local.bProc.Declare(Boolean)
+V.Local.sCurrentParent.Declare(String)
+V.Local.sCost.Declare(String)
+F.Intrinsic.String.Format(V.Ambient.Now,"MMDDYY",V.Local.sdate)
+
+F.Intrinsic.File.File2String(V.Args.sfile,V.Local.slines)
+F.Intrinsic.String.Split(V.Local.slines,V.Ambient.NewLine,V.Local.slines)
+
+F.Intrinsic.Control.For(V.Local.iL,1,V.Local.slines.UBound,1)
+	F.Intrinsic.Control.If(V.Local.slines(v.Local.iL),<>,"")
+		F.Intrinsic.string.SplitCSV(V.Local.slines(v.Local.iL),V.Local.sline)
+		F.Intrinsic.Control.If(V.Local.sline.UBound,>=,7)
+			V.Local.sPart.Set(V.Local.sline(1))
+			V.uGlobal.uBOM(1)!Value.Set(V.Local.sline(0))
+			V.uGlobal.uBOM(2)!Value.Set(V.Local.sline(1))
+			V.uGlobal.uBOM(3)!Value.Set(V.Local.sline(2))
+			V.uGlobal.uBOM(5)!Value.Set(V.Local.sline(3))
+			V.uGlobal.uBOM(13)!Value.Set(V.Local.sline(4))
+			V.uGlobal.uBOM(14)!Value.Set(V.Local.sline(5))
+			V.uGlobal.uBOM(8)!Value.Set(V.Local.sline(6))
+			V.Local.scost.Set(V.Local.sline(7))
+			'modified to save Drawing number 4/13/12
+			V.uGlobal.uBOM(11)!Value.Set(V.Local.sline(8))
+			F.Intrinsic.Control.If(V.Local.scurrentParent,<>,V.Local.sline(0))
+				V.Local.sCurrentParent.Set(V.Local.sline(0))
+				F.Intrinsic.Control.If(V.Global.Parents.UBound,=,-1)
+					V.Global.Parents.Redim(0,0)
+					V.Local.iUB.Set(0)
+				F.Intrinsic.Control.Else
+					F.Intrinsic.Math.Add(V.Global.Parents.UBound,1,V.Local.iUB)
+					V.Global.Parents.Redimpreserve(0,V.Local.iUB)
+				F.Intrinsic.Control.endif
+				V.Global.Parents(v.Local.iUB).Set(V.Local.sCurrentParent)
+				F.Intrinsic.String.Concat("SELECT PART FROM INVENTORY_MSTR WHERE PART= '",V.Local.scurrentParent,"'",V.Local.squery)
+				F.ODBC.Connection!conP.OpenRecordsetRO("rst",V.Local.squery)
+				F.Intrinsic.Control.If(V.ODBC.conP!rst.EOF,=,False)
+					F.Intrinsic.Control.If(V.Local.sline(1),=,"")
+						F.Intrinsic.String.Concat(V.Ambient.Date," ",V.Ambient.time," Parent Already exists in inventory: ",V.Local.sCurrentParent," FILE: ",V.Args.sfile,V.Local.squery)
+						F.Intrinsic.File.Append2File(V.Global.log,V.Local.squery)
+						F.global.Messaging.CreateEMMessage("gslogreview@vce.com","Log Review","gslogreview@vce.com","Log Review","Log Review Parent Already Exists",V.Local.squery)
+						'F.global.Messaging.CreateEMMessage("emarlow@gssmail.com","Log Review","emarlow@gssmail.com","Log Review","Log Review Parent Already Exists",V.Local.squery)
+						F.Intrinsic.Control.end
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+					F.Global.Inventory.AddPartToBatch(V.Local.sCurrentParent,"EA",V.Local.sline(3),"","FG","M","","",0,"OCTSRS")
+					F.Global.Inventory.PostPartBatch
+				F.Intrinsic.Control.EndIf
+					'UPDATE FIELDS
+					F.Intrinsic.String.Concat("SELECT FLAG_SERIALIZE, CODE_BOM, FLAG_LOT FROM INVENTORY_MSTR WHERE PART= '",V.Local.sPart,"'",V.Local.squery)
+					F.ODBC.Connection!conP.OpenLocalRecordsetRW("rstW",V.Local.squery)
+
+					F.Intrinsic.Control.If(V.ODBC.conP!rstW.EOF,=,False)
+						F.ODBC.conP!rstW.Set!FLAG_SERIALIZE("Y")
+						F.ODBC.conP!rstW.Set!CODE_BOM("B")
+						F.ODBC.conP!rstW.Set!FLAG_LOT("Y")
+						F.ODBC.conP!rstW.Update
+					F.Intrinsic.Control.EndIf
+					F.ODBC.conP!rstW.close
+					F.Intrinsic.String.Concat("select REQUIRES_INSP from INVENTORY_MST2 WHERE PART= '",V.Local.sPart,"'",V.Local.squery)
+					F.ODBC.Connection!conP.OpenLocalRecordsetRW("rstW",V.Local.squery)
+
+					F.Intrinsic.Control.If(V.ODBC.conP!rstW.EOF,=,False)
+						F.ODBC.conP!rstW.Set!REQUIRES_INSP("Y")
+						F.ODBC.conP!rstW.Update
+					F.Intrinsic.Control.EndIf
+					F.ODBC.conP!rstW.close
+
+'				F.Intrinsic.Control.EndIf
+				F.ODBC.conP!rst.Close
+			F.Intrinsic.Control.endif
+			V.Local.bProc.Set(True)
+		
+			F.Intrinsic.Control.If(V.Local.sline(4).trim,<>,"P")
+				F.Intrinsic.String.Concat("SELECT PART,FLAG_SERIALIZE FROM INVENTORY_MSTR WHERE PART= '",V.Local.sPart,"'",V.Local.squery)
+				F.ODBC.Connection!conP.OpenRecordsetRO("rst",V.Local.squery)
+				F.Intrinsic.Control.If(V.ODBC.conP!rst.EOF,=,True)
+					F.Intrinsic.String.Concat(V.Ambient.Date," ",V.Ambient.time," Component missing in inventory: ",V.Local.sPart," FILE:",V.Args.sfile,V.Local.squery)
+					F.Intrinsic.File.Append2File(V.Global.log,V.Local.squery)
+					'F.global.Messaging.CreateEMMessage("emarlow@gssmail.com","Log Review","emarlow@gssmail.com","Log Review","Log Review Parent Already Exists",V.Local.squery)
+					F.global.Messaging.CreateEMMessage("gslogreview@vce.com","Log Review","gslogreview@vce.com","Log Review","Component Missing in Inventory",V.Local.squery)
+					F.Intrinsic.Control.end
+				F.Intrinsic.Control.Else
+					F.Intrinsic.Control.If(V.ODBC.conP!rst.FieldValTrim!Flag_Serialize,=,"Y")
+						F.Intrinsic.String.Concat("select REQUIRES_INSP from INVENTORY_MST2 WHERE PART ='",V.Local.sPart,"'",V.Local.squery)
+						F.ODBC.Connection!conP.OpenRecordsetRO("rst2",V.Local.squery)
+						F.Intrinsic.Control.If(V.ODBC.conP!rst2.EOF,=,False)
+							F.Intrinsic.Control.If(V.ODBC.conP!rst2.FieldVal,<>,"Y")
+								F.Intrinsic.String.Concat(V.Ambient.Date," ",V.Ambient.time," Component inventory part flagged for serialization not flagged for inspection: ",V.Local.sPart," FILE:",V.Args.sfile,V.Local.squery)
+								F.Intrinsic.File.Append2File(V.Global.log,V.Local.squery)
+								'F.global.Messaging.CreateEMMessage("emarlow@gssmail.com","Log Review","emarlow@gssmail.com","Log Review","Log Review Parent Already Exists",V.Local.squery)
+								F.global.Messaging.CreateEMMessage("gslogreview@vce.com","Log Review","gslogreview@vce.com","Log Review","Component inventory part flagged for serialization not flagged for inspection:",V.Local.squery)
+								F.Intrinsic.Control.end
+							F.Intrinsic.Control.endif
+						F.Intrinsic.Control.EndIf
+						F.ODBC.conP!rst2.Close
+					F.Intrinsic.Control.endif
+				F.Intrinsic.Control.EndIf
+				F.ODBC.conP!rst.Close
+			F.Intrinsic.Control.endif
+			F.Intrinsic.Control.CallSub(Procudt)
+		F.Intrinsic.Control.endif
+	F.Intrinsic.Control.endif
+F.Intrinsic.Control.Next(V.Local.iL)
+F.Intrinsic.Debug.Stop
+
+F.Intrinsic.String.Concat(V.Caller.CompanyCode,"1UPLBOMC",V.Local.stemp)
+F.Intrinsic.Task.LaunchGSSSync("UPL001A","-c",V.Local.stemp)
+
+F.Intrinsic.file.GetFileNameFromFQN(V.Args.sfile,V.Local.stemp)
+F.Intrinsic.String.Concat(V.global.completed,"\",V.Local.stemp,V.Local.sdate," .csv",V.Local.stemp)
+F.Intrinsic.File.MoveFile(V.Args.sfile,V.Local.stemp,V.Local.stemp)
+
+
+Program.Sub.ProcessFile.End
+
+Program.Sub.ProcUDT.Start
+
+V.Local.ic.Declare(Long)
+V.Local.sOutput.Declare(String)
+V.Local.stemp.Declare(String)
+
+F.Intrinsic.Control.For(V.Local.ic,1,V.uglobal.uBOM.UBound,1)
+	V.Local.stemp.Set("")
+	F.Intrinsic.Control.if(V.uGlobal.uBOM(v.Local.ic)!Numeric,=,True)
+		F.Intrinsic.Control.If(V.Uglobal.uBOM(v.Local.ic)!Format,<>,"")
+			F.Intrinsic.Control.If(V.uGlobal.uBOM(v.Local.ic)!Value.IsNumeric,=,True)
+				F.Intrinsic.String.Format(V.uglobal.uBOM(V.Local.ic)!value,V.Uglobal.uBOM(V.Local.ic)!Format,V.Local.stemp)
+			F.Intrinsic.Control.endif
+		F.Intrinsic.Control.Else
+			V.Local.stemp.Set(V.uGlobal.uBOM(v.Local.ic)!Value)
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.string.LPad(V.Local.stemp,"0",V.uGlobal.uBOM(v.Local.ic)!Size,V.Local.stemp)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.string.RPad(V.uGlobal.uBOM(v.Local.ic)!Value," ",V.uGlobal.uBOM(v.Local.ic)!Size,V.Local.stemp)
+
+	F.Intrinsic.Control.endif
+	F.Intrinsic.Control.If(V.Local.sOutput.Length,=,0)
+		V.Local.sOutput.Set(V.Local.stemp)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Concat(V.Local.sOutput,V.Local.stemp,V.Local.sOutput)
+	F.Intrinsic.Control.endif
+
+F.Intrinsic.Control.next(V.Local.ic)
+
+F.Intrinsic.Control.If(V.global.file,=,"")
+	F.Intrinsic.String.Concat(V.caller.FilesDir,"\BOMC.txt",V.global.file)
+	F.Intrinsic.file.String2File(V.Global.file,V.Local.sOutput)
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Concat(V.Ambient.NewLine,V.Local.sOutput,V.Local.sOutput)
+	F.Intrinsic.File.Append2File(V.global.file,V.Local.sOutput)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.For(V.Local.ic,1,V.uglobal.uBOM.UBound,1)
+	V.Uglobal.uBOM(v.Local.ic)!Value.Set("")
+F.Intrinsic.Control.next(V.Local.ic)
+
+
+Program.Sub.ProcUDT.End
+
+Program.Sub.PrepUDT.Start
+V.Uglobal.uBOM.Redim(0,25)
+V.Local.iPos.Declare(Long)
+V.Local.iPos.Set(0)
+
+V.Local.iPos.Set(1)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Parent Number")
+V.uGlobal.uBOM(v.Local.ipos)!Required.Set(True)
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("20")
+			
+V.Local.iPos.Set(2)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Part Number")
+V.uGlobal.uBOM(v.Local.ipos)!Required.Set(True)
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("20")
+			
+V.Local.iPos.Set(3)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Quantity")
+V.uGlobal.uBOM(v.Local.ipos)!Required.Set(True)
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("16")
+			
+V.Local.iPos.Set(4)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Unit of Measure")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("2")
+			
+V.Local.iPos.Set(5)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Component Part Description")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("30")
+			
+V.Local.iPos.Set(6)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Memo-1 Information")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("30")
+			
+V.Local.iPos.Set(7)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Memo-2 Information")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("30")
+			
+V.Local.iPos.Set(8)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Vendor Number")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(9)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Vendor Part Number")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("20")
+			
+V.Local.iPos.Set(10)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Bom Purge Flag")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("1")
+			
+V.Local.iPos.Set(11)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Drawing")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("20")
+			
+V.Local.iPos.Set(12)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Tag")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(13)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Category")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("1")
+			
+V.Local.iPos.Set(14)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Source")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("1")
+			
+V.Local.iPos.Set(15)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Frequency")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(16)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Drawing Size")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("1")
+			
+V.Local.iPos.Set(17)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Similar Part")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("20")
+			
+V.Local.iPos.Set(18)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Revision Code")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("2")
+			
+V.Local.iPos.Set(19)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Revision Date")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(20)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Sort Value")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("12")
+			
+V.Local.iPos.Set(21)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Start Date")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(22)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Stop Date")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("6")
+			
+V.Local.iPos.Set(23)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Serial Number Start")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("15")
+			
+V.Local.iPos.Set(24)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Serial Number Stop")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("15")
+			
+V.Local.iPos.Set(25)
+V.Uglobal.uBOM(v.Local.iPos)!Field.Set("Requires Traceability Flag")
+V.uGlobal.uBOM(v.Local.ipos)!size.Set("1")
+
+Program.Sub.PrepUDT.End
+
+Program.Sub.PRocessRouters.Start
+V.Local.iC.Declare(Long)
+V.Local.stemp.Declare(String)
+V.Local.suser.Declare(String)
+
+F.Intrinsic.String.RPad(V.Caller.User," ",8,V.Local.suser)
+F.ODBC.Connection!conP.OpenRecordsetRO("rstR","SELECT ROUTER FROM ROUTER_HEADER WHERE ROUTER ='TEMPLATE_ROUTER'")
+F.Intrinsic.Control.If(V.odbc.conP!rstR.EOF,=,True)
+	'ADDING TEMPLATE ROUTER
+	F.Intrinsic.Control.CallSub(Routerclear)
+	F.Intrinsic.Control.CallSub(Routeraddrecord,"NUMBER","TEMPLATE_ROUTER","PART","","PL","","COMMENT","","UM","HR","LMO","L","RUNTIME",16,"WORKCENTER","PBWG","OVERLAP","")
+	F.Intrinsic.Control.CallSub(Routeraddrecord,"NUMBER","TEMPLATE_ROUTER","PART","","PL","","COMMENT","","UM","HR","LMO","L","RUNTIME",40,"WORKCENTER","LBWG","OVERLAP","")
+	F.Intrinsic.Control.CallSub(Routeraddrecord,"NUMBER","TEMPLATE_ROUTER","PART","","PL","","COMMENT","","UM","HR","LMO","L","RUNTIME",8,"WORKCENTER","PSWG","OVERLAP","")
+	F.Intrinsic.Control.CallSub(Routergenerate)
+
+F.Intrinsic.Control.endif
+F.ODBC.conP!rstR.Close
+F.Intrinsic.Debug.Stop
+
+F.Intrinsic.Control.For(V.Local.iC,V.Global.Parents.LBound,V.Global.Parents.UBound,1)
+	'APPEND TEMPLATE_ROUTER TO PART
+	F.Intrinsic.String.RPad(V.Global.Parents(v.Local.iC)," ",20,V.Global.Parents(v.Local.iC))
+	F.Intrinsic.String.RPad("TEMPLATE_ROUTER"," ",20,V.Local.stemp)
+
+	F.Intrinsic.String.Concat(V.Caller.CompanyCode,V.Caller.Terminal,V.Local.sUser,V.Local.stemp,V.Global.Parents(v.Local.iC),V.Local.stemp)
+	F.Intrinsic.Task.LaunchGSSSync("XUPLRTR4","-c",V.Local.stemp)
+	F.Intrinsic.Control.CallSub(Update_drawing,"sRouter",V.Global.Parents(v.Local.iC))
+F.Intrinsic.Control.Next(V.Local.iC)
+
+
+Program.Sub.PRocessRouters.End
+
+Program.Sub.Update_Drawing.Start
+V.Local.sSQL.Declare(String)
+V.Local.sRouter.Declare(String)
+
+V.Local.sRouter.Set(V.Args.sRouter)
+F.Intrinsic.String.Concat("Select * from Router_Header where Router='",V.Local.sRouter,"'",V.Local.sSQL)
+F.ODBC.Connection!conP.OpenLocalRecordsetRW("rstUpdate",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.conP!rstUpdate.EOF,=,False)
+	F.ODBC.conP!rstUpdate.Set!Drawing_Customer(V.uGlobal.uBOM(11)!Value)
+	F.ODBC.conP!rstUpdate.Update
+F.Intrinsic.Control.EndIf
+F.ODBC.conP!rstUpdate.Close
+
+Program.Sub.Update_Drawing.End
+
+Program.Sub.SetServer.Start
+
+F.Intrinsic.Control.If(V.Ambient.isintaskscheduler,=,False)
+
+	F.Intrinsic.Control.SelectCase(V.system.ComputerName)
+	
+	F.Intrinsic.Control.Case("USVGSAPPWS0801")
+		V.Global.sServer.Set("\\USVGSTERMWS0801\")
+	F.Intrinsic.Control.Case("VCE-WPGSAPP01")
+		V.Global.sServer.Set("\\VCE-WPGSTERM01\")
+	F.Intrinsic.Control.Case("USVGSTERMWS0801")
+		V.Global.sServer.Set("\\USVGSTERMWS0801\")
+	F.Intrinsic.Control.Case("VCE-WPGSTERM01")
+		V.Global.sServer.Set("\\VCE-WPGSTERM01\")
+
+	F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Else
+
+	F.Intrinsic.Control.SelectCase(V.System.ComputerName)
+	
+	F.Intrinsic.Control.Case("USVGSAPPWS0801")
+		V.Global.sServer.Set("L:\")
+	F.Intrinsic.Control.Case("VCE-WPGSAPP01")
+		V.Global.sServer.Set("L:\")
+	F.Intrinsic.Control.Case("USVGSTERMWS0801")
+		V.Global.sServer.Set("E:\")
+	F.Intrinsic.Control.Case("VCE-WPGSTERM01")
+		V.Global.sServer.Set("E:\")
+
+	F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.EndIf
+
+Program.Sub.SetServer.End
+
+Program.Sub.Comments.Start
+${$0$}$ATG_VCE_BOM_UPLAOD$}$JND$}$3/18/2012
+${$3$}$0$}$$}$-1$}$-1$}$$}$1/1/1900$}$Run from task scheduler or Menu Security
+Program.Sub.Comments.End
+
